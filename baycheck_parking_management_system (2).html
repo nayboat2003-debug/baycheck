@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>BayCheck – ระบบจัดการคิวและที่จอดรถ</title>
+<!-- Google Fonts: IBM Plex Sans Thai -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['"IBM Plex Sans Thai"', 'sans-serif'],
+        }
+      }
+    }
+  }
+</script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'IBM Plex Sans Thai', sans-serif;
+    user-select: none;
+  }
+  
+  /* Thai License Plate Styling */
+  .thai-plate {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    color: #111827;
+    border: 3px solid #111827;
+    border-radius: 8px;
+    padding: 2px 14px;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15), inset 0 0 0 2px #ffffff, inset 0 0 0 3.5px #111827;
+  }
+
+  /* Custom Print styles */
+  @media print {
+    body * { visibility: hidden; }
+    #printable-ticket, #printable-ticket * { visibility: visible; }
+    #printable-ticket {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      background: white !important;
+      color: black !important;
+      padding: 20px;
+    }
+    nav, header, .no-print { display: none !important; }
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); border-radius: 9999px; }
+</style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col pb-24 md:pb-6 transition-colors duration-200">
+
+  <!-- TOP HEADER -->
+  <header class="sticky top-0 z-20 bg-slate-900 text-white shadow-md border-b-4 border-amber-400">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-400 text-slate-900 font-black text-xl flex items-center justify-center shadow-inner">
+          🅿️
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight leading-none flex items-center gap-2">
+            BayCheck
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-medium">Open Space</span>
+          </h1>
+          <p class="text-xs text-slate-400 mt-0.5" id="header-date">กำลังโหลดวันเวลา...</p>
+        </div>
+      </div>
+      <!-- Mode Toggle -->
+      <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 transition-colors" title="เปลี่ยนธีม">
+        <span id="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-3xl mx-auto w-full px-4 pt-4 flex-1">
+    
+    <!-- DASHBOARD VIEW -->
+    <section id="v-dash" class="view-section space-y-4">
+      <!-- Stats Grid (Open Space System) -->
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-slate-800 text-white p-4 rounded-2xl shadow-sm border border-slate-700 relative overflow-hidden">
+          <div class="text-xs font-medium text-slate-400">รถที่จอดอยู่</div>
+          <div class="text-3xl font-extrabold text-amber-400 mt-1" id="stat-parked">0</div>
+          <div class="text-[10px] text-slate-400 mt-1">คันในลานตอนนี้</div>
+          <div class="absolute -right-2 -bottom-2 text-4xl opacity-10">🚘</div>
+        </div>
+
+        <div class="bg-slate-800 text-white p-4 rounded-2xl shadow-sm border border-slate-700 relative overflow-hidden">
+          <div class="text-xs font-medium text-slate-400">เข้าจอดวันนี้</div>
+          <div class="text-3xl font-extrabold text-emerald-400 mt-1" id="stat-today-in">0</div>
+          <div class="text-[10px] text-slate-400 mt-1">คันทั้งหมด</div>
+          <div class="absolute -right-2 -bottom-2 text-4xl opacity-10">📥</div>
+        </div>
+
+        <div class="bg-slate-800 text-white p-4 rounded-2xl shadow-sm border border-slate-700 relative overflow-hidden">
+          <div class="text-xs font-medium text-slate-400">รายได้วันนี้</div>
+          <div class="text-2xl sm:text-3xl font-extrabold text-emerald-300 mt-1" id="stat-income">0</div>
+          <div class="text-[10px] text-slate-400 mt-1">บาท</div>
+          <div class="absolute -right-2 -bottom-2 text-4xl opacity-10">💵</div>
+        </div>
+      </div>
+
+      <!-- Quick Action Button -->
+      <button onclick="switchTab('in')" class="w-full py-4 bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold text-lg rounded-2xl shadow-md transition active:scale-[0.99] flex items-center justify-center gap-2">
+        <span>📸</span> ถ่ายรูปบันทึกรถเข้าจอดใหม่
+      </button>
+
+      <!-- Search Bar -->
+      <div class="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex gap-2 items-center">
+        <span class="text-slate-400 pl-2">🔍</span>
+        <input type="text" id="dash-search" oninput="renderDash()" placeholder="ค้นหาทะเบียน, จุดจอด หรือ เลขคิว..." 
+          class="w-full bg-transparent focus:outline-none text-sm dark:text-white placeholder-slate-400">
+      </div>
+
+      <!-- Parked Vehicles List -->
+      <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
+            <span>⏱️</span> รายการรถในลาน (เรียงตามจอดนานสุด)
+          </h2>
+          <span class="text-xs text-slate-400" id="parked-count-badge">0 คัน</span>
+        </div>
+        <div id="parked-list" class="divide-y divide-slate-100 dark:divide-slate-700">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- CHECK-IN VIEW -->
+    <section id="v-in" class="view-section space-y-4 hidden">
+      <form id="checkin-form" onsubmit="handleCheckin(event)" class="space-y-4">
+        
+        <!-- Camera Capture Card -->
+        <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-2">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-between">
+            <span>📸 ถ่ายรูปทะเบียนรถ <span class="text-rose-500">*</span></span>
+          </label>
+          <div id="cam-box" onclick="document.getElementById('cam-file').click()" 
+            class="w-full min-h-[170px] rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900 transition flex flex-col items-center justify-center cursor-pointer overflow-hidden relative">
+            <input type="file" id="cam-file" accept="image/*" capture="environment" class="hidden" onchange="handlePhotoUpload(this)">
+            
+            <div id="cam-placeholder" class="text-center p-4">
+              <span class="text-4xl block mb-2">📷</span>
+              <span class="text-sm font-medium text-slate-700 dark:text-slate-200">แตะเพื่อถ่ายรูปทะเบียนรถ</span>
+              <p class="text-xs text-slate-400 mt-1">บันทึกรูปไว้สำหรับตรวจสอบตอนปล่อยรถออก</p>
+            </div>
+
+            <img id="cam-preview" class="w-full h-52 object-cover hidden rounded-lg" alt="รูปถ่ายทะเบียน">
+          </div>
+        </div>
+
+        <!-- License Plate Input -->
+        <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-2">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-between">
+            <span>🚘 หมายเลขทะเบียนรถ <span class="text-slate-400 text-xs font-normal">(ไม่กรอกก็ได้ ถ้ารีบ)</span></span>
+          </label>
+          <input type="text" id="in-plate" placeholder="เช่น 1กข 8899 (หรือปล่อยว่างไว้)" 
+            class="w-full p-3 text-center text-2xl font-bold uppercase tracking-wider rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-amber-400 focus:outline-none">
+        </div>
+
+        <!-- Quick Selection Chips: Colors, Types, Gender -->
+        <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+          <!-- Gender Select -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">👤 เพศผู้ขับขี่</label>
+            <div class="flex flex-wrap gap-2" id="chips-gender"></div>
+          </div>
+
+          <!-- Vehicle Color Select -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">🎨 สีรถ</label>
+            <div class="flex flex-wrap gap-2" id="chips-color"></div>
+          </div>
+
+          <!-- Vehicle Type Select -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">🚙 ประเภทรถ</label>
+            <div class="flex flex-wrap gap-2" id="chips-type"></div>
+          </div>
+        </div>
+
+        <!-- Open Space Spot Remark -->
+        <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-2">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200">
+            📍 ระบุจุดจอด / โซนในลาน (พิมพ์อิสระ)
+          </label>
+          <input type="text" id="in-spot" placeholder="เช่น ฝั่งซ้ายใกล้ต้นไม้, ใกล้ทางออก 2" 
+            class="w-full p-3 text-sm rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-amber-400 focus:outline-none">
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" class="w-full py-4 bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold text-lg rounded-2xl shadow-md transition active:scale-[0.99] flex items-center justify-center gap-2">
+          <span>✅</span> ยืนยันบันทึกเข้าลาน & ออกคิว
+        </button>
+      </form>
+    </section>
+
+    <!-- CHECK-OUT VIEW -->
+    <section id="v-out" class="view-section space-y-4 hidden">
+      <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
+        <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200">
+          🔎 ค้นหารายการรถเพื่อปล่อยออก
+        </label>
+        <div class="relative">
+          <input type="text" id="out-search" oninput="renderOutList()" placeholder="พิมพ์เลขทะเบียน, จุดจอด หรือ คิว..." 
+            class="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:border-amber-400 focus:outline-none">
+          <span class="absolute left-3 top-3.5 text-slate-400">🔍</span>
+        </div>
+      </div>
+
+      <!-- Active Parking Records List for Checkout -->
+      <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <h2 class="text-sm font-bold text-slate-500 dark:text-slate-400 mb-3">รายการรถในลานจอด</h2>
+        <div id="checkout-list" class="divide-y divide-slate-100 dark:divide-slate-700">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS VIEW -->
+    <section id="v-set" class="view-section space-y-4 hidden">
+      <!-- Pricing Tier Config -->
+      <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <span>💵</span> อัตราค่าบริการจอดรถ (Stepped Rates)
+          </h2>
+          <button onclick="addPricingTier()" class="px-2.5 py-1 text-xs font-bold bg-amber-400 text-slate-900 rounded-lg">
+            + เพิ่มขั้นราคา
+          </button>
+        </div>
+        <p class="text-xs text-slate-400">ช่องสุดท้ายปล่อยว่างไว้เพื่อตั้งเป็นราคาจอดเกินกำหนด</p>
+
+        <div id="tier-rows-container" class="space-y-2">
+          <!-- Dynamic Tier Rows -->
+        </div>
+      </div>
+
+      <!-- Save Settings Action -->
+      <button onclick="saveSettings()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow transition">
+        💾 บันทึกอัตราค่าบริการ
+      </button>
+
+      <!-- Data Management / Clear History -->
+      <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3 mt-6">
+        <h2 class="text-base font-bold text-rose-500 flex items-center gap-2">
+          <span>🗑️</span> จัดการล้างข้อมูลประวัติ
+        </h2>
+        <p class="text-xs text-slate-400">ล้างประวัติรถที่ทำรายการออกแล้วเพื่อประหยัดพื้นที่จัดเก็บข้อมูล</p>
+        <button onclick="clearExitedHistory()" class="px-4 py-2 bg-rose-100 hover:bg-rose-200 dark:bg-rose-900/40 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-300 font-semibold text-xs rounded-xl transition">
+          ล้างประวัติการนำรถออกทั้งหมด
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- BOTTOM NAVIGATION BAR -->
+  <nav class="fixed bottom-0 inset-x-0 bg-slate-900 text-slate-400 border-t border-slate-800 z-30 shadow-lg">
+    <div class="max-w-3xl mx-auto flex justify-around">
+      <button onclick="switchTab('dash')" data-tab="dash" class="nav-btn flex-1 py-2.5 flex flex-col items-center gap-0.5 text-amber-400 font-bold transition">
+        <span class="text-xl">🅿️</span>
+        <span class="text-[11px]">ภาพรวม</span>
+      </button>
+      <button onclick="switchTab('in')" data-tab="in" class="nav-btn flex-1 py-2.5 flex flex-col items-center gap-0.5 hover:text-amber-400 transition">
+        <span class="text-xl">🚗</span>
+        <span class="text-[11px]">รับรถเข้า</span>
+      </button>
+      <button onclick="switchTab('out')" data-tab="out" class="nav-btn flex-1 py-2.5 flex flex-col items-center gap-0.5 hover:text-amber-400 transition">
+        <span class="text-xl">🚪</span>
+        <span class="text-[11px]">ปล่อยรถออก</span>
+      </button>
+      <button onclick="switchTab('set')" data-tab="set" class="nav-btn flex-1 py-2.5 flex flex-col items-center gap-0.5 hover:text-amber-400 transition">
+        <span class="text-xl">⚙️</span>
+        <span class="text-[11px]">ตั้งค่า</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- MODAL DIALOG -->
+  <div id="modal" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm hidden items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity">
+    <div id="modal-content" class="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 w-full max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+      <!-- Dynamic Sheet Content -->
+    </div>
+  </div>
+
+  <!-- PHOTO PREVIEW MODAL (FULLSCREEN) -->
+  <div id="photo-modal" class="fixed inset-0 z-50 bg-slate-950/90 hidden items-center justify-center p-4 cursor-pointer" onclick="closePhotoModal()">
+    <img id="photo-modal-img" class="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl" alt="รูปถ่ายทะเบียนรถ">
+    <p class="absolute bottom-6 text-white text-xs bg-slate-800/80 px-4 py-2 rounded-full">แตะตรงไหนก็ได้เพื่อปิด</p>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toast-container" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none"></div>
+
+  <!-- APP LOGIC -->
+  <script>
+    const STORAGE_KEY = 'baycheck_openspace_v1';
+    
+    const GENDERS = [{ id: 'ชาย', label: 'ชาย 👨' }, { id: 'หญิง', label: 'หญิง 👩' }, { id: 'อื่นๆ', label: 'อื่นๆ 🧑' }];
+    const COLORS = [
+      { id: 'ขาว', hex: '#ffffff' }, { id: 'ดำ', hex: '#1e293b' }, { id: 'เทา', hex: '#94a3b8' },
+      { id: 'บรอนซ์', hex: '#cbd5e1' }, { id: 'แดง', hex: '#ef4444' }, { id: 'น้ำเงิน', hex: '#3b82f6' },
+      { id: 'เหลือง', hex: '#eab308' }, { id: 'อื่นๆ', hex: '#a855f7' }
+    ];
+    const TYPES = [{ id: 'เก๋ง', label: '🚗 เก๋ง' }, { id: 'SUV', label: '🚙 SUV' }, { id: 'กระบะ', label: '🛻 กระบะ' }, { id: 'มอเตอร์ไซค์', label: '🛵 มอเตอร์ไซค์' }];
+
+    let state = loadState();
+    let formData = { photo: '', gender: '', color: '', type: '' };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      updateHeaderDate();
+      renderGenderChips();
+      renderColorChips();
+      renderTypeChips();
+      renderDash();
+
+      setInterval(() => {
+        const activeTab = document.querySelector('.view-section:not(.hidden)')?.id;
+        if (activeTab === 'v-dash') renderDash();
+        if (activeTab === 'v-out') renderOutList();
+      }, 30000);
+    });
+
+    function getDefaultState() {
+      return {
+        tiers: [{ upto: 60, fee: 0 }, { upto: 180, fee: 20 }, { upto: null, fee: 50 }],
+        logs: []
+      };
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch(e) {}
+      return getDefaultState();
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        showToast('⚠️ พื้นที่เต็ม! แนะนำล้างประวัติที่ออกแล้วในหน้าตั้งค่า');
+      }
+    }
+
+    function initTheme() {
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+        document.getElementById('theme-icon').textContent = '☀️';
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.getElementById('theme-icon').textContent = '🌙';
+      }
+    }
+
+    function toggleDarkMode() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.theme = isDark ? 'dark' : 'light';
+      document.getElementById('theme-icon').textContent = isDark ? '☀️' : '🌙';
+    }
+
+    function updateHeaderDate() {
+      const now = new Date();
+      document.getElementById('header-date').textContent = now.toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function showToast(msg) {
+      const container = document.getElementById('toast-container');
+      const el = document.createElement('div');
+      el.className = 'bg-slate-900 text-white dark:bg-amber-400 dark:text-slate-950 px-4 py-2.5 rounded-xl shadow-xl text-xs font-bold border border-slate-700 pointer-events-auto transition duration-300 transform translate-y-2 opacity-0';
+      el.textContent = msg;
+      container.appendChild(el);
+      requestAnimationFrame(() => el.classList.remove('translate-y-2', 'opacity-0'));
+      setTimeout(() => {
+        el.classList.add('opacity-0', '-translate-y-2');
+        setTimeout(() => el.remove(), 300);
+      }, 2500);
+    }
+
+    function getParkedLogs() {
+      return state.logs.filter(l => l.status === 'parked');
+    }
+
+    function calculateMinutes(inTime, outTime = Date.now()) {
+      return Math.max(1, Math.ceil((outTime - inTime) / 60000));
+    }
+
+    function formatDuration(mins) {
+      if (mins >= 60) {
+        return `${Math.floor(mins / 60)} ชม. ${mins % 60} นาที`;
+      }
+      return `${mins} นาที`;
+    }
+
+    function formatTime(t) {
+      return new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function calculateFee(mins) {
+      if (!state.tiers || !state.tiers.length) return 0;
+      for (const tier of state.tiers) {
+        if (tier.upto === null || mins <= tier.upto) return tier.fee;
+      }
+      return state.tiers[state.tiers.length - 1].fee;
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.view-section').forEach(sec => sec.classList.add('hidden'));
+      document.getElementById(`v-${tabId}`).classList.remove('hidden');
+
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        if (btn.dataset.tab === tabId) {
+          btn.classList.add('text-amber-400', 'font-bold');
+          btn.classList.remove('text-slate-400');
+        } else {
+          btn.classList.remove('text-amber-400', 'font-bold');
+          btn.classList.add('text-slate-400');
+        }
+      });
+
+      if (tabId === 'dash') renderDash();
+      if (tabId === 'in') prepareCheckinForm();
+      if (tabId === 'out') renderOutList();
+      if (tabId === 'set') renderSettings();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // --- DASHBOARD ---
+    function renderDash() {
+      const parked = getParkedLogs();
+      const todayStr = new Date().toDateString();
+
+      const todayIn = state.logs.filter(l => new Date(l.inAt).toDateString() === todayStr).length;
+      const income = state.logs
+        .filter(l => l.status === 'exited' && new Date(l.outAt).toDateString() === todayStr)
+        .reduce((sum, l) => sum + (l.fee || 0), 0);
+
+      document.getElementById('stat-parked').textContent = parked.length;
+      document.getElementById('stat-today-in').textContent = todayIn;
+      document.getElementById('stat-income').textContent = income.toLocaleString();
+
+      const query = (document.getElementById('dash-search')?.value || '').trim().toLowerCase();
+      const listEl = document.getElementById('parked-list');
+      
+      const filtered = [...parked]
+        .filter(l => !query || l.plate.toLowerCase().includes(query) || (l.spot && l.spot.toLowerCase().includes(query)) || String(l.queueNum).includes(query))
+        .sort((a, b) => a.inAt - b.inAt);
+
+      document.getElementById('parked-count-badge').textContent = `${filtered.length} คัน`;
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">ไม่มีรายการรถที่กำลังจอดอยู่</p>`;
+        return;
+      }
+
+      listEl.innerHTML = filtered.map(log => {
+        const mins = calculateMinutes(log.inAt);
+        return `
+          <div class="py-3 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              ${log.photo ? `
+                <img src="${log.photo}" onclick="openPhotoModal('${log.photo}')" class="w-12 h-12 rounded-lg object-cover border border-slate-300 dark:border-slate-700 cursor-pointer hover:opacity-80 transition" title="คลิกเพื่อดูรูปใหญ่">
+              ` : `<div class="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center text-xl">🚘</div>`}
+              <div>
+                <div class="thai-plate text-xs cursor-pointer" onclick="openOutModal(${log.id})">
+                  <span>${escapeHtml(log.plate)}</span>
+                </div>
+                <div class="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+                  <span class="bg-amber-400 text-slate-950 font-bold px-1.5 py-0.2 rounded text-[10px]">คิว #${log.queueNum}</span>
+                  <span>${log.spot ? '📍 ' + escapeHtml(log.spot) : 'ไม่ได้ระบุจุดจอด'}</span>
+                  <span>• ${log.type || 'รถ'} (สี${log.color || '-'})</span>
+                </div>
+              </div>
+            </div>
+            <div class="text-right flex flex-col items-end gap-1">
+              <span class="text-xs font-bold text-amber-500">${formatDuration(mins)}</span>
+              <button onclick="openOutModal(${log.id})" class="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[11px] rounded-lg shadow transition">
+                ปล่อยรถ
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // --- CHECK-IN FORM & CHIPS ---
+    function renderGenderChips() {
+      document.getElementById('chips-gender').innerHTML = GENDERS.map(g => `
+        <button type="button" onclick="selectChip('gender', '${g.id}', this)" class="chip-btn px-3 py-1.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium">${g.label}</button>
+      `).join('');
+    }
+    function renderColorChips() {
+      document.getElementById('chips-color').innerHTML = COLORS.map(c => `
+        <button type="button" onclick="selectChip('color', '${c.id}', this)" class="chip-btn px-3 py-1.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1.5"><span class="w-3 h-3 rounded-full border border-slate-400" style="background:${c.hex}"></span>${c.id}</button>
+      `).join('');
+    }
+    function renderTypeChips() {
+      document.getElementById('chips-type').innerHTML = TYPES.map(t => `
+        <button type="button" onclick="selectChip('type', '${t.id}', this)" class="chip-btn px-3 py-1.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium">${t.label}</button>
+      `).join('');
+    }
+
+    function selectChip(field, val, btn) {
+      const isSelected = formData[field] === val;
+      formData[field] = isSelected ? '' : val;
+      btn.parentElement.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('border-amber-400', 'bg-amber-400', 'text-slate-950', 'font-bold'));
+      if (!isSelected) btn.classList.add('border-amber-400', 'bg-amber-400', 'text-slate-950', 'font-bold');
+    }
+
+    function prepareCheckinForm() {
+      formData = { photo: '', gender: '', color: '', type: '' };
+      document.getElementById('checkin-form').reset();
+      document.getElementById('cam-preview').classList.add('hidden');
+      document.getElementById('cam-placeholder').classList.remove('hidden');
+      document.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('border-amber-400', 'bg-amber-400', 'text-slate-950', 'font-bold'));
+    }
+
+    // PHOTO UPLOAD
+    function handlePhotoUpload(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // Canvas Compress
+          const maxDim = 600;
+          let w = img.width, h = img.height;
+          if (w > h ? w > maxDim : h > maxDim) {
+            if (w > h) { h *= maxDim / w; w = maxDim; }
+            else { w *= maxDim / h; h = maxDim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          formData.photo = dataUrl;
+
+          const preview = document.getElementById('cam-preview');
+          preview.src = dataUrl;
+          preview.classList.remove('hidden');
+          document.getElementById('cam-placeholder').classList.add('hidden');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function handleCheckin(e) {
+      e.preventDefault();
+      if (!formData.photo) return showToast('📸 กรุณาถ่ายรูปทะเบียน/รถก่อน');
+      let plate = document.getElementById('in-plate').value.trim();
+
+      const todayStr = new Date().toDateString();
+      const todayLogs = state.logs.filter(l => new Date(l.inAt).toDateString() === todayStr);
+      const queueNum = (todayLogs.reduce((max, l) => Math.max(max, l.queueNum || 0), 0)) + 1;
+
+      // If plate is left empty (attendant is in a rush), set fallback text
+      if (!plate) {
+        plate = `ไม่ระบุทะเบียน (คิว #${queueNum})`;
+      } else {
+        plate = plate.toUpperCase();
+      }
+
+      const log = {
+        id: Date.now(),
+        queueNum,
+        plate: plate,
+        photo: formData.photo,
+        gender: formData.gender,
+        color: formData.color,
+        type: formData.type,
+        spot: document.getElementById('in-spot').value.trim(),
+        inAt: Date.now(),
+        status: 'parked'
+      };
+
+      state.logs.push(log);
+      saveState();
+      showToast(`บันทึกเข้าลานสำเร็จ! คิว #${queueNum}`);
+      openTicketModal(log);
+    }
+
+    function openTicketModal(log) {
+      const modal = document.getElementById('modal');
+      const content = document.getElementById('modal-content');
+      content.innerHTML = `
+        <div id="printable-ticket" class="p-6 text-center space-y-4">
+          <div class="border-b border-slate-200 dark:border-slate-700 pb-3">
+            <h3 class="text-xs font-bold uppercase text-slate-400">บัตรคิวจอดรถ • BayCheck</h3>
+            <div class="text-6xl font-black text-amber-500 my-2">#${log.queueNum}</div>
+            <div class="thai-plate text-lg my-1"><span>${escapeHtml(log.plate)}</span></div>
+          </div>
+          <div class="text-xs space-y-1.5 text-slate-600 dark:text-slate-300">
+            <div class="flex justify-between"><span>จุดจอด:</span> <b>${escapeHtml(log.spot || 'ในลานจอด')}</b></div>
+            <div class="flex justify-between"><span>เวลาเข้า:</span> <b>${new Date(log.inAt).toLocaleString('th-TH')}</b></div>
+            <div class="flex justify-between"><span>รายละเอียด:</span> <b>${log.type || 'รถ'} • สี${log.color || '-'}</b></div>
+          </div>
+          <div class="pt-4 flex flex-col gap-2 no-print">
+            <button onclick="window.print()" class="w-full py-3 bg-slate-900 text-amber-400 font-bold rounded-xl hover:bg-slate-800 transition">🖨️ พิมพ์ตั๋วคิว</button>
+            <button onclick="closeModal(); switchTab('dash');" class="w-full py-3 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold rounded-xl">เสร็จสิ้น</button>
+          </div>
+        </div>
+      `;
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+    }
+
+    // --- CHECKOUT LOGIC ---
+    function renderOutList() {
+      const query = (document.getElementById('out-search')?.value || '').trim().toLowerCase();
+      const listEl = document.getElementById('checkout-list');
+      const parked = getParkedLogs().filter(l => !query || l.plate.toLowerCase().includes(query) || (l.spot && l.spot.toLowerCase().includes(query)) || String(l.queueNum).includes(query));
+
+      if (parked.length === 0) {
+        listEl.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">ไม่พบรายการรถตรงกับคำค้นหา</p>`;
+        return;
+      }
+
+      listEl.innerHTML = parked.map(log => {
+        const mins = calculateMinutes(log.inAt);
+        const fee = calculateFee(mins);
+        return `
+          <div class="py-3 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              ${log.photo ? `
+                <img src="${log.photo}" onclick="openPhotoModal('${log.photo}')" class="w-12 h-12 rounded-lg object-cover border border-slate-300 dark:border-slate-700 cursor-pointer hover:opacity-80 transition" title="ดูรูปถ่าย">
+              ` : `<div class="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-lg flex items-center justify-center text-xl">🚘</div>`}
+              <div>
+                <div class="thai-plate text-xs inline-flex mb-1 cursor-pointer" onclick="openOutModal(${log.id})">
+                  <span>${escapeHtml(log.plate)}</span>
+                </div>
+                <div class="text-[11px] text-slate-400">คิว #${log.queueNum} • ${log.spot ? escapeHtml(log.spot) : 'ในลาน'} • เข้า ${formatTime(log.inAt)} น.</div>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-extrabold text-emerald-500">${fee} บาท</div>
+              <button onclick="openOutModal(${log.id})" class="px-3 py-1 mt-1 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs rounded-lg transition">
+                ทำรายการออก
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openOutModal(logId) {
+      const log = state.logs.find(l => l.id === logId);
+      if (!log) return;
+      const mins = calculateMinutes(log.inAt);
+      const fee = calculateFee(mins);
+
+      const modal = document.getElementById('modal');
+      const content = document.getElementById('modal-content');
+
+      content.innerHTML = `
+        <div class="p-5 space-y-4 overflow-y-auto max-h-[88vh]">
+          <div class="flex justify-between items-start border-b border-slate-200 dark:border-slate-700 pb-3">
+            <div>
+              <h3 class="text-base font-bold text-slate-800 dark:text-white">ปล่อยรถออกจากลาน (Check-out)</h3>
+              <p class="text-xs text-slate-400">ตรวจสอบรูปถ่ายยืนยันก่อนปล่อยรถ</p>
+            </div>
+            <button onclick="closeModal()" class="text-slate-400 text-xl font-bold px-2">✕</button>
+          </div>
+
+          ${log.photo ? `
+            <div class="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 relative">
+              <img src="${log.photo}" onclick="openPhotoModal('${log.photo}')" class="w-full h-48 object-cover cursor-pointer hover:opacity-90 transition" alt="รูปทะเบียน">
+              <span class="absolute bottom-2 right-2 bg-slate-900/80 text-white text-[10px] px-2 py-1 rounded-lg">📷 แตะเพื่อขยายรูป</span>
+            </div>
+          ` : ''}
+
+          <div class="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-xl space-y-2 text-xs">
+            <div class="flex justify-between items-center">
+              <span class="text-slate-400">ทะเบียนรถ:</span>
+              <div class="thai-plate text-xs"><span>${escapeHtml(log.plate)}</span></div>
+            </div>
+            <div class="flex justify-between"><span class="text-slate-400">หมายเลขคิว:</span> <b>#${log.queueNum}</b></div>
+            <div class="flex justify-between"><span class="text-slate-400">จุดจอดในลาน:</span> <b>${log.spot || 'ไม่ได้ระบุ'}</b></div>
+            <div class="flex justify-between"><span class="text-slate-400">เวลาเข้า:</span> <b>${new Date(log.inAt).toLocaleString('th-TH')}</b></div>
+            <div class="flex justify-between"><span class="text-slate-400">ระยะเวลาจอด:</span> <b class="text-amber-500 font-bold">${formatDuration(mins)}</b></div>
+          </div>
+
+          <div class="text-center py-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800">
+            <div class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">ค่าบริการจอดรถ</div>
+            <div class="text-4xl font-black text-emerald-600 dark:text-emerald-400 my-0.5">${fee} <span class="text-base font-normal">บาท</span></div>
+          </div>
+
+          <div class="space-y-2">
+            <button onclick="confirmCheckout(${log.id}, ${fee}, ${mins})" class="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-base rounded-xl shadow transition">
+              ✅ ตรวจสอบแล้วถูกต้อง - ปล่อยรถออก
+            </button>
+            <button onclick="closeModal()" class="w-full py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl">ยกเลิก</button>
+          </div>
+        </div>
+      `;
+
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+    }
+
+    function confirmCheckout(logId, fee, mins) {
+      const log = state.logs.find(l => l.id === logId);
+      if (log) {
+        log.status = 'exited';
+        log.outAt = Date.now();
+        log.minutes = mins;
+        log.fee = fee;
+        saveState();
+
+        showToast(`ปล่อยรถทะเบียน ${log.plate} เรียบร้อยแล้ว (${fee} บาท)`);
+        closeModal();
+
+        const activeTab = document.querySelector('.view-section:not(.hidden)')?.id;
+        if (activeTab === 'v-dash') renderDash();
+        if (activeTab === 'v-out') renderOutList();
+      }
+    }
+
+    function openPhotoModal(src) {
+      document.getElementById('photo-modal-img').src = src;
+      document.getElementById('photo-modal').classList.remove('hidden');
+      document.getElementById('photo-modal').classList.add('flex');
+    }
+
+    function closePhotoModal() {
+      document.getElementById('photo-modal').classList.add('hidden');
+      document.getElementById('photo-modal').classList.remove('flex');
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('modal');
+      modal.classList.add('hidden'); modal.classList.remove('flex');
+    }
+
+    // --- SETTINGS ---
+    function renderSettings() {
+      renderTierRows();
+    }
+
+    function renderTierRows() {
+      document.getElementById('tier-rows-container').innerHTML = state.tiers.map((tier, index) => `
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-slate-400 min-w-[50px]">ไม่เกิน</span>
+          <input type="number" data-index="${index}" class="tier-upto w-24 p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white" placeholder="ปล่อยว่าง=เกิน" value="${tier.upto !== null ? tier.upto : ''}">
+          <span class="text-slate-400">นาที</span>
+          <input type="number" data-index="${index}" class="tier-fee w-24 p-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white" placeholder="0" value="${tier.fee}">
+          <span class="text-slate-400">บาท</span>
+          <button onclick="removeTierRow(${index})" class="text-rose-500 font-bold p-1 hover:bg-rose-100 rounded">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function addPricingTier() {
+      state.tiers.push({ upto: null, fee: 0 });
+      renderTierRows();
+    }
+
+    function removeTierRow(idx) {
+      state.tiers.splice(idx, 1);
+      renderTierRows();
+    }
+
+    function saveSettings() {
+      const uptoInputs = document.querySelectorAll('.tier-upto');
+      const feeInputs = document.querySelectorAll('.tier-fee');
+      const newTiers = [];
+
+      uptoInputs.forEach((input, i) => {
+        const val = input.value.trim();
+        newTiers.push({
+          upto: val === '' ? null : parseInt(val),
+          fee: parseFloat(feeInputs[i].value) || 0
+        });
+      });
+
+      newTiers.sort((a, b) => (a.upto ?? 999999) - (b.upto ?? 999999));
+      state.tiers = newTiers;
+      saveState();
+      showToast('บันทึกอัตราค่าบริการเรียบร้อย');
+    }
+
+    function clearExitedHistory() {
+      if (confirm('ยืนยันล้างประวัติการนำรถออกทั้งหมด? (รถที่จอดอยู่จะไม่ถูกลบ)')) {
+        state.logs = getParkedLogs();
+        saveState();
+        showToast('ล้างประวัติที่ออกแล้วสำเร็จ');
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[match]));
+    }
+  </script>
+</body>
+</html>
